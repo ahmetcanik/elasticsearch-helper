@@ -1,0 +1,37 @@
+/bin/
+/target/
+/out/
+/classes/
+.classpath
+.idea
+
+# User-specific stuff:
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/dictionaries
+.idea/codeStyles/
+.idea/artifacts/
+
+# Sensitive or high-churn files:
+.idea/**/dataSources/
+.idea/**/dataSources.ids
+.idea/**/dataSources.xml
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/uiDesigner.xml
+
+# Gradle:
+.idea/**/gradle.xml
+.idea/**/libraries
+
+# IntelliJ
+out/
+
+# Logs
+logs/
+
+# Maven-shade
+dependency-reduced-pom.xml
+
+sh.exe.stackdump
