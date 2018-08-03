@@ -1,4 +1,4 @@
-package elastic.helper;
+package elasticsearch.helper;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategy;

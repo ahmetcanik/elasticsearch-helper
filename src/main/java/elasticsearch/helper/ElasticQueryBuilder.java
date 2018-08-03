@@ -1,4 +1,4 @@
-package elastic.helper;
+package elasticsearch.helper;
 
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.index.query.QueryBuilder;

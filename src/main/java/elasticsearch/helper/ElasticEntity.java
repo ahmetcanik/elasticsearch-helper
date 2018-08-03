@@ -1,4 +1,4 @@
-package elastic.helper;
+package elasticsearch.helper;
 
 public class ElasticEntity {
 	private String id;

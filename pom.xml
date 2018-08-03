@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>ahmetcanik</groupId>
-    <artifactId>elastic-helper</artifactId>
+    <artifactId>elasticsearch-helper</artifactId>
     <version>0.0.1</version>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -27,13 +27,13 @@
                 <version>3.1.0</version>
                 <executions>
                     <execution>
-                        <id>elastic-helper</id>
+                        <id>elasticsearch-helper</id>
                         <phase>package</phase>
                         <goals>
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <outputFile>target/elastic-helper.jar</outputFile>
+                            <outputFile>target/elasticsearch-helper.jar</outputFile>
                             <transformers>
                                 <transformer
                                         implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
