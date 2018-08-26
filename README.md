@@ -31,7 +31,7 @@ Helper capabilities:
 [6.Masking](###6.Masking)
 
 
-###1.Sorting
+### 1.Sorting
 ```
 try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient()) {
     MatchAllQueryBuilder query = QueryBuilders.matchAllQuery();
