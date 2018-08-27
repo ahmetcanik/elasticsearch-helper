@@ -61,3 +61,37 @@ try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient())
 }
 ```
 `SearchResult` class holds `from` and `size`, so pagination can be resumed with these values from previous searches.
+
+### Aggregation
+Aggregation discards query hit results, it just returns aggregation results.
+
+To get `max` value of `created_at` field:
+```
+try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient()) {
+    MatchAllQueryBuilder query = QueryBuilders.matchAllQuery();
+    AggregationBuilder aggregation = AggregationBuilders.max("max_created_at").field("created_at");
+    ElasticQueryBuilder builder = new ElasticQueryBuilder(restHighLevelClient, query)
+            .indices("twitter")
+            .aggregation(aggregation);
+    SearchResult result = ElasticHelper.queryMultiple(builder);
+} catch (IOException e) {
+    e.printStackTrace();
+}
+```
+
+### Scrolling
+[Scrolling](https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-search-scroll.htmlhttps://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-search-scroll.html) is used from getting massive amount of documents at once.
+
+Following code tries to get all documents within 10 seconds. For each scroll, it gets 1000 hits.
+```
+try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient()) {
+    MatchAllQueryBuilder query = QueryBuilders.matchAllQuery();
+    ElasticQueryBuilder builder = new ElasticQueryBuilder(restHighLevelClient, query)
+            .indices("twitter")
+            .size(1000)
+            .scroll("10s");
+    SearchResult result = ElasticHelper.queryMultiple(builder);
+} catch (IOException e) {
+    e.printStackTrace();
+}
+```
