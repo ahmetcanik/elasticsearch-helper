@@ -18,20 +18,21 @@ which return one document of the `twitter` index.
 
 Helper capabilities:
 
-[1.Sorting](###1.Sorting)
+[Sorting](###Sorting)
 
-[2.Pagination](###2.Pagination)
+[Pagination](###Pagination)
 
-[3.Aggregation](###3.Aggregation)
+[Aggregation](###Aggregation)
 
-[4.Scrolling](###4.Scrolling)
+[Scrolling](###Scrolling)
 
-[5.Highlighting](###5.Highlighting)
+[Highlighting](###Highlighting)
 
-[6.Masking](###6.Masking)
+[Masking](###Masking)
 
 
-### 1.Sorting
+### Sorting
+To sort `twitter` index by the field `created_at` and order `DESC`:
 ```
 try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient()) {
     MatchAllQueryBuilder query = QueryBuilders.matchAllQuery();
@@ -44,3 +45,19 @@ try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient())
     e.printStackTrace();
 }
 ```
+
+### Pagination
+To get 10 search hits starting from 20 (records 20,21,..,29):
+```
+try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient()) {
+    MatchAllQueryBuilder query = QueryBuilders.matchAllQuery();
+    ElasticQueryBuilder builder = new ElasticQueryBuilder(restHighLevelClient, query)
+            .indices("twitter")
+            .from(20) // .from(previousResult.getFrom() + HITS_PER_PAGE)
+            .size(10) // .size(HITS_PER_PAGE);
+    SearchResult result = ElasticHelper.queryMultiple(builder);
+} catch (IOException e) {
+    e.printStackTrace();
+}
+```
+`SearchResult` class holds `from` and `size`, so pagination can be resumed with these values from previous searches.
