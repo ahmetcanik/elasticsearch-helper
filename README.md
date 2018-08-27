@@ -80,7 +80,7 @@ try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient())
 ```
 
 ### Scrolling
-[Scrolling](https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-search-scroll.htmlhttps://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-search-scroll.html) is used from getting massive amount of documents at once.
+[Scrolling](https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-search-scroll.html) is used from getting massive amount of documents at once.
 
 Following code tries to get all documents within 10 seconds. For each scroll, it gets 1000 hits.
 ```
