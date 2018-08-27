@@ -18,9 +18,9 @@ which return one document of the `twitter` index.
 
 Helper capabilities:
 
-[Sorting](###Sorting)
+[Sorting](#Sorting)
 
-[Pagination](###Pagination)
+[Pagination](#Pagination)
 
 [Aggregation](###Aggregation)
 
