@@ -31,7 +31,7 @@ Helper capabilities:
 [Masking](###Masking)
 
 
-### Sorting
+###Sorting
 To sort `twitter` index by the field `created_at` and order `DESC`:
 ```
 try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient()) {
@@ -46,7 +46,7 @@ try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient())
 }
 ```
 
-### Pagination
+###Pagination
 To get 10 search hits starting from 20 (records 20,21,..,29):
 ```
 try (RestHighLevelClient restHighLevelClient = ElasticHelper.buildLocalClient()) {
