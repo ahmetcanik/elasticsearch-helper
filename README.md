@@ -18,17 +18,17 @@ which return one document of the `twitter` index.
 
 Helper capabilities:
 
-[Sorting](#Sorting)
+[Sorting](#sorting)
 
-[Pagination](#Pagination)
+[Pagination](#pagination)
 
-[Aggregation](###Aggregation)
+[Aggregation](#aggregation)
 
-[Scrolling](###Scrolling)
+[Scrolling](#scrolling)
 
-[Highlighting](###Highlighting)
+[Highlighting](#highlighting)
 
-[Masking](###Masking)
+[Masking](#masking)
 
 
 ### Sorting
