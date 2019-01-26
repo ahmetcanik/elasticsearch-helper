@@ -22,7 +22,7 @@ which return one document of the `twitter` index.
     <repository>
         <id>ahmetcanik-repo</id>
         <name>ahmetcanik Maven Repo on Github</name>
-        <url>https://raw.github.com/com.github.ahmetcanik/elasticsearch-helper/repository</url>
+        <url>https://raw.githubusercontent.com/ahmetcanik/elasticsearch-helper/repository</url>
     </repository>
 </repositories>
 ```
