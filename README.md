@@ -32,7 +32,7 @@ which return one document of the `twitter` index.
     <dependency>
         <groupId>com.github.ahmetcanik</groupId>
         <artifactId>elasticsearch-helper</artifactId>
-        <version>0.0.1</version>
+        <version>0.0.2</version>
     </dependency>
 </dependencies>
 ```
