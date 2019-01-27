@@ -1,7 +1,9 @@
 package elasticsearch.helper;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategy;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -11,52 +13,91 @@ import java.lang.invoke.MethodHandles;
 import java.util.List;
 
 public class JsonUtil {
-	private static final Logger logger = LogManager.getLogger(MethodHandles.lookup().lookupClass());
+    /**
+     * Builds object from given json
+     *
+     * @param json         json string
+     * @param objectMapper ObjectMapper
+     * @param valueType    object type to build
+     * @param <T>          type of the object
+     * @return Built object
+     */
+    public static <T> T getObject(String json, ObjectMapper objectMapper, Class<T> valueType) throws IOException {
+        return objectMapper.readValue(json, valueType);
+    }
 
-	private static final ObjectMapper mapper = new ObjectMapper();
-	private static final ObjectMapper snakeMapper = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE);
+    /**
+     * Builds list of object from given json
+     *
+     * @param json         json string
+     * @param objectMapper ObjectMapper
+     * @param valueType    list type to build
+     * @param <T>          type of the object
+     * @return Built object
+     */
+    public static <T> List<T> getList(String json, ObjectMapper objectMapper, Class<T> valueType) throws IOException {
+        TypeFactory typeFactory = objectMapper.getTypeFactory();
+        return objectMapper.readValue(json, typeFactory.constructCollectionType(List.class, valueType));
+    }
 
+    public static <T extends ElasticEntity> String getJson(ObjectMapper objectMapper, T entity) throws IOException {
+        String json = objectMapper.writeValueAsString(entity);
+        return deleteId(objectMapper, json);
+    }
 
-	public static ObjectMapper getMapper() {
-		return mapper;
-	}
+    public static String writeId(ObjectMapper objectMapper, String id, String source) {
+        try {
+            JsonNode jsonNode = objectMapper.readTree(source);
+            ((ObjectNode) jsonNode).put("id", id);
 
-	public static ObjectMapper getSnakeMapper() {
-		return snakeMapper;
-	}
+            return objectMapper.writeValueAsString(jsonNode);
+        } catch (IOException e) {
+            return source;
+        }
+    }
 
-	/**
-	 * Builds object from given json
-	 *
-	 * @param json      json string
-	 * @param valueType object type to build
-	 * @param <T>       type of the object
-	 * @return Built object, null if building failed
-	 */
-	public static <T> T getObject(String json, Class<T> valueType) {
-		try {
-			return JsonUtil.getMapper().readValue(json, valueType);
-		} catch (IOException e) {
-			logger.error("Json deserialization error for: " + json, e);
-			return null;
-		}
-	}
+    public static String deleteId(ObjectMapper objectMapper, String source) {
+        try {
+            JsonNode jsonNode = objectMapper.readTree(source);
+            ((ObjectNode) jsonNode).remove("id");
 
-	/**
-	 * Builds list of object from given json
-	 *
-	 * @param json      json string
-	 * @param valueType list type to build
-	 * @param <T>       type of the object
-	 * @return Built object, null if building failed
-	 */
-	public static <T> List<T> getList(String json, Class<T> valueType) {
-		TypeFactory typeFactory = JsonUtil.getMapper().getTypeFactory();
-		try {
-			return JsonUtil.getMapper().readValue(json, typeFactory.constructCollectionType(List.class, valueType));
-		} catch (IOException e) {
-			logger.error("Json deserialization error for: " + json, e);
-			return null;
-		}
-	}
+            return objectMapper.writeValueAsString(jsonNode);
+        } catch (IOException e) {
+            return source;
+        }
+    }
+
+    public static String removeField(ObjectMapper objectMapper, String fieldName, String source) {
+        try {
+            JsonNode jsonNode = objectMapper.readTree(source);
+            ((ObjectNode) jsonNode).remove(fieldName);
+
+            return objectMapper.writeValueAsString(jsonNode);
+        } catch (IOException e) {
+            return source;
+        }
+    }
+
+    /**
+     * Set given field value to given JSON
+     *
+     * @param fieldName  field name to be set
+     * @param value      new value for field
+     * @param jsonSource original JSON
+     * @return new JSON string
+     */
+    public static String setNodeValue(ObjectMapper objectMapper, String fieldName, String value, String jsonSource) throws IOException {
+        JsonNode jsonNode = objectMapper.readTree(jsonSource);
+
+        if (jsonNode.isArray()) {
+            for (JsonNode node : jsonNode) {
+                ((ObjectNode) node).put(fieldName, value);
+            }
+        } else {
+            ((ObjectNode) jsonNode).put(fieldName, value);
+        }
+
+        return objectMapper.writeValueAsString(jsonNode);
+
+    }
 }

@@ -1,7 +1,5 @@
 package elasticsearch.helper;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import org.apache.http.HttpHost;
 import org.apache.logging.log4j.LogManager;
@@ -46,319 +44,260 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class ElasticHelper {
-	private static final Logger logger = LogManager.getLogger(MethodHandles.lookup().lookupClass());
+    private static final Logger logger = LogManager.getLogger(MethodHandles.lookup().lookupClass());
+    RestHighLevelClient client;
+    ElasticHelperConfig config;
 
-	public static RestHighLevelClient buildLocalClient() {
-		return new RestHighLevelClient(RestClient.builder(new HttpHost("localhost", 9200, "http")));
-	}
+    public static RestHighLevelClient buildLocalClient() {
+        return new RestHighLevelClient(RestClient.builder(new HttpHost("localhost", 9200, "http")));
+    }
 
-	public static RestHighLevelClient buildRemoteClient(String hostname, int port) {
-		return new RestHighLevelClient(RestClient.builder(new HttpHost(hostname, port, "http")));
-	}
+    public static RestHighLevelClient buildRemoteClient(String hostname, int port) {
+        return new RestHighLevelClient(RestClient.builder(new HttpHost(hostname, port, "http")));
+    }
 
-	public static String querySingle(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
-		SearchRequest searchRequest;
-		if (elasticQueryBuilder.indices() == null)
-			searchRequest = new SearchRequest();
-		else
-			searchRequest = new SearchRequest(elasticQueryBuilder.indices());
-		SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-		searchSourceBuilder.query(elasticQueryBuilder.query()).size(1);
+    public ElasticHelper(RestHighLevelClient client, ElasticHelperConfig config) {
+        this.client = client;
+        this.config = config;
+    }
 
-		// aggregation
-		if (elasticQueryBuilder.aggregation() != null)
-			searchSourceBuilder.aggregation(elasticQueryBuilder.aggregation());
+    public String querySingle(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
+        SearchRequest searchRequest;
+        if (elasticQueryBuilder.indices() == null)
+            searchRequest = new SearchRequest();
+        else
+            searchRequest = new SearchRequest(elasticQueryBuilder.indices());
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.query(elasticQueryBuilder.query()).size(1);
 
-		// sorting
-		setSorting(elasticQueryBuilder, searchSourceBuilder);
+        // aggregation
+        if (elasticQueryBuilder.aggregation() != null)
+            searchSourceBuilder.aggregation(elasticQueryBuilder.aggregation());
 
-		searchRequest.source(searchSourceBuilder);
-		SearchResponse searchResponse = elasticQueryBuilder.client().search(searchRequest);
-		SearchHits hits = searchResponse.getHits();
+        // sorting
+        setSorting(elasticQueryBuilder, searchSourceBuilder);
 
-		if (hits.totalHits == 0)
-			return null;
+        searchRequest.source(searchSourceBuilder);
+        SearchResponse searchResponse = elasticQueryBuilder.client().search(searchRequest);
+        SearchHits hits = searchResponse.getHits();
 
-		String json = writeId(hits.getAt(0).getId(), hits.getAt(0).getSourceAsString());
+        if (hits.totalHits == 0)
+            return null;
 
-		// do masking
-		for (String field : elasticQueryBuilder.maskFields().keySet()) {
-			json = setNodeValue(field, elasticQueryBuilder.maskFields().get(field), json);
-		}
+        String json = JsonUtil.writeId(config.getJsonObjectMapper(), hits.getAt(0).getId(), hits.getAt(0).getSourceAsString());
 
-		return json;
-	}
+        // do masking
+        for (String field : elasticQueryBuilder.maskFields().keySet()) {
+            json = JsonUtil.setNodeValue(config.getJsonObjectMapper(), field, elasticQueryBuilder.maskFields().get(field), json);
+        }
 
-	public static SearchResult queryMultiple(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
-		SearchRequest searchRequest;
-		if (elasticQueryBuilder.indices() == null)
-			searchRequest = new SearchRequest();
-		else
-			searchRequest = new SearchRequest(elasticQueryBuilder.indices());
-		SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-		searchSourceBuilder.query(elasticQueryBuilder.query());
-		if (elasticQueryBuilder.from() > -1)
-			searchSourceBuilder = searchSourceBuilder.from(elasticQueryBuilder.from());
-		if (elasticQueryBuilder.size() > 0)
-			searchSourceBuilder = searchSourceBuilder.size(elasticQueryBuilder.size());
+        return json;
+    }
 
-		if (elasticQueryBuilder.highlightFields() != null) {
-			HighlightBuilder highlightBuilder = new HighlightBuilder();
-			highlightBuilder.fields().addAll(
-					Arrays.stream(elasticQueryBuilder.highlightFields()).map(HighlightBuilder.Field::new).collect(Collectors.toList()));
-			searchSourceBuilder.highlighter(highlightBuilder);
-		}
+    public SearchResult queryMultiple(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
+        SearchRequest searchRequest;
+        if (elasticQueryBuilder.indices() == null)
+            searchRequest = new SearchRequest();
+        else
+            searchRequest = new SearchRequest(elasticQueryBuilder.indices());
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.query(elasticQueryBuilder.query());
+        if (elasticQueryBuilder.from() > -1)
+            searchSourceBuilder = searchSourceBuilder.from(elasticQueryBuilder.from());
+        if (elasticQueryBuilder.size() > 0)
+            searchSourceBuilder = searchSourceBuilder.size(elasticQueryBuilder.size());
 
-		// aggregation
-		if (elasticQueryBuilder.aggregation() != null) {
-			searchSourceBuilder.aggregation(elasticQueryBuilder.aggregation());
-			searchSourceBuilder.size(0); // no terms, just aggregations
-		}
+        if (elasticQueryBuilder.highlightFields() != null) {
+            HighlightBuilder highlightBuilder = new HighlightBuilder();
+            highlightBuilder.fields().addAll(
+                    Arrays.stream(elasticQueryBuilder.highlightFields()).map(HighlightBuilder.Field::new).collect(Collectors.toList()));
+            searchSourceBuilder.highlighter(highlightBuilder);
+        }
 
-		// sorting
-		setSorting(elasticQueryBuilder, searchSourceBuilder);
-		searchRequest.source(searchSourceBuilder);
+        // aggregation
+        if (elasticQueryBuilder.aggregation() != null) {
+            searchSourceBuilder.aggregation(elasticQueryBuilder.aggregation());
+            searchSourceBuilder.size(0); // no terms, just aggregations
+        }
 
-		// scrolling
-		if (elasticQueryBuilder.scroll() != null) {
-			searchRequest.scroll(elasticQueryBuilder.scroll());
-		}
+        // sorting
+        setSorting(elasticQueryBuilder, searchSourceBuilder);
+        searchRequest.source(searchSourceBuilder);
 
-		// get response
-		SearchResponse searchResponse = elasticQueryBuilder.client().search(searchRequest);
+        // scrolling
+        if (elasticQueryBuilder.scroll() != null) {
+            searchRequest.scroll(elasticQueryBuilder.scroll());
+        }
 
-		int from = elasticQueryBuilder.from();
-		int size = searchResponse.getHits().totalHits > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) searchResponse.getHits().totalHits;
+        long startTime = System.nanoTime();
+        // get response
+        SearchResponse searchResponse = elasticQueryBuilder.client().search(searchRequest);
+        logger.debug(String.format("ES search time %d ms", (System.nanoTime() - startTime) / 1000000));
 
-		SearchHit[] searchHits = searchResponse.getHits().getHits();
-		List<SearchHit> hits = new ArrayList<>();
+        int from = elasticQueryBuilder.from();
+        int size = searchResponse.getHits().totalHits > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) searchResponse.getHits().totalHits;
 
-		// scrolling
-		if (elasticQueryBuilder.scroll() != null) {
-			String scrollId = searchResponse.getScrollId();
-			while (scrollId != null && !scrollId.isEmpty() && searchHits != null && searchHits.length > 0) {
-				hits.addAll(Arrays.asList(searchHits));
-				SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId);
-				scrollRequest.scroll(elasticQueryBuilder.scroll());
-				searchResponse = elasticQueryBuilder.client().searchScroll(scrollRequest);
-				scrollId = searchResponse.getScrollId();
-				searchHits = searchResponse.getHits().getHits();
-			}
-		} else
-			hits.addAll(Arrays.asList(searchHits));
+        SearchHit[] searchHits = searchResponse.getHits().getHits();
+        List<SearchHit> hits = new ArrayList<>();
 
-		List<String> jsonBuilder = new ArrayList<>();
+        // scrolling
+        if (elasticQueryBuilder.scroll() != null) {
+            String scrollId = searchResponse.getScrollId();
+            while (scrollId != null && !scrollId.isEmpty() && searchHits != null && searchHits.length > 0) {
+                hits.addAll(Arrays.asList(searchHits));
+                SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId);
+                scrollRequest.scroll(elasticQueryBuilder.scroll());
+                searchResponse = elasticQueryBuilder.client().searchScroll(scrollRequest);
+                scrollId = searchResponse.getScrollId();
+                searchHits = searchResponse.getHits().getHits();
+            }
+        } else
+            hits.addAll(Arrays.asList(searchHits));
 
-		for (SearchHit hit : hits) {
-			// write id
-			String json = writeId(hit.getId(), hit.getSourceAsString());
+        List<String> jsonBuilder = new ArrayList<>();
 
-			// do masking
-			for (String field : elasticQueryBuilder.maskFields().keySet()) {
-				json = setNodeValue(field, elasticQueryBuilder.maskFields().get(field), json);
-			}
+        for (SearchHit hit : hits) {
+            // write id
+            String json = JsonUtil.writeId(config.getJsonObjectMapper(), hit.getId(), hit.getSourceAsString());
 
-			// do highlighting
-			for (Map.Entry<String, HighlightField> entry : hit.getHighlightFields().entrySet()) {
-				json = setNodeValue("snippet", String.join("...", toStringList(entry.getValue().fragments())), json);
-			}
+            // do masking
+            for (String field : elasticQueryBuilder.maskFields().keySet()) {
+                json = JsonUtil.setNodeValue(config.getJsonObjectMapper(), field, elasticQueryBuilder.maskFields().get(field), json);
+            }
 
-			jsonBuilder.add(json);
-		}
+            // do highlighting
+            for (Map.Entry<String, HighlightField> entry : hit.getHighlightFields().entrySet()) {
+                json = JsonUtil.setNodeValue(config.getJsonObjectMapper(), config.getSnippetFieldName(), String.join("...", toStringList(entry.getValue().fragments())), json);
+            }
 
-		String json;
+            jsonBuilder.add(json);
+        }
 
-		if (elasticQueryBuilder.aggregation() == null)
-			json = "[" + String.join(",", jsonBuilder) + "]";
-		else {
-			XContentBuilder builder = XContentFactory.jsonBuilder();
-			builder.startObject();
-			searchResponse.getAggregations().toXContent(builder, ToXContent.EMPTY_PARAMS);
-			builder.endObject();
-			json = builder.string();
-		}
+        String json;
 
-		return new SearchResult(json, from, size);
-	}
+        if (elasticQueryBuilder.aggregation() == null)
+            json = "[" + String.join(",", jsonBuilder) + "]";
+        else {
+            XContentBuilder builder = XContentFactory.jsonBuilder();
+            builder.startObject();
+            searchResponse.getAggregations().toXContent(builder, ToXContent.EMPTY_PARAMS);
+            builder.endObject();
+            json = builder.string();
+        }
 
-	public static <T extends ElasticEntity> void insert(RestHighLevelClient client, String index, T entity) throws IOException {
-		try {
-			String json = deleteId(JsonUtil.getSnakeMapper().writeValueAsString(entity));
-			logger.info(json);
-			IndexRequest request = new IndexRequest(index, "_doc");
-			request.source(json, XContentType.JSON);
-			IndexResponse response = client.index(request);
+        return new SearchResult(json, from, size);
+    }
 
-			// update entity id
-			entity.setId(response.getId());
-		} catch (IOException ioe) {
-			logger.error("insert error", ioe);
-			throw new IOException(ioe);
-		}
-	}
+    public <T extends ElasticEntity> void insert(RestHighLevelClient client, String index, T entity) throws IOException {
+        try {
+            String json = JsonUtil.deleteId(config.getJsonObjectMapper(), config.getJsonObjectMapper().writeValueAsString(entity));
+            IndexRequest request = new IndexRequest(index, config.getElasticType());
+            request.source(json, XContentType.JSON);
+            IndexResponse response = client.index(request);
 
-	@SuppressWarnings("unchecked")
-	public static <T extends ElasticEntity> T update(RestHighLevelClient client, String index, T entity, String... ignoreFields) throws IOException {
-		String source = deleteId(JsonUtil.getSnakeMapper().writeValueAsString(entity));
+            // update entity id
+            entity.setId(response.getId());
+        } catch (IOException ioe) {
+            logger.error("insert error", ioe);
+            throw new IOException(ioe);
+        }
+    }
 
-		for (String ignoreField : ignoreFields) {
-			source = removeField(ignoreField, source);
-		}
+    @SuppressWarnings("unchecked")
+    public <T extends ElasticEntity> T update(RestHighLevelClient client, String index, T entity, String... ignoreFields) throws IOException {
+        String source = JsonUtil.deleteId(config.getJsonObjectMapper(), config.getJsonObjectMapper().writeValueAsString(entity));
 
-		UpdateRequest request = new UpdateRequest(index, "_doc", entity.getId())
-				.doc(source, XContentType.JSON);
+        for (String ignoreField : ignoreFields) {
+            source = JsonUtil.removeField(config.getJsonObjectMapper(), ignoreField, source);
+        }
 
-		request.fetchSource(true);
+        UpdateRequest request = new UpdateRequest(index, config.getElasticType(), entity.getId())
+                .doc(source, XContentType.JSON);
 
-		UpdateResponse updateResponse = client.update(request);
+        request.fetchSource(true);
 
-		GetResult getResult = updateResponse.getGetResult();
+        UpdateResponse updateResponse = client.update(request);
 
-		return getEntity(entity, getResult);
-	}
+        GetResult getResult = updateResponse.getGetResult();
 
-	@SuppressWarnings("unchecked")
-	public static <T extends ElasticEntity> T incrementCounter(RestHighLevelClient client, String index, String counterFieldName, T entity) throws IOException {
-		UpdateRequest request = new UpdateRequest(index, "_doc", entity.getId());
+        return getEntity(entity, getResult);
+    }
 
-		Map<String, Object> parameters = java.util.Collections.singletonMap("count", 1);
+    @SuppressWarnings("unchecked")
+    public <T extends ElasticEntity> T incrementCounter(RestHighLevelClient client, String index, String counterFieldName, T entity) throws IOException {
+        UpdateRequest request = new UpdateRequest(index, config.getElasticType(), entity.getId());
 
-		String script = "";
-		// check for nested field
-		if (counterFieldName.contains(".")) {
-			String path = counterFieldName.substring(0, counterFieldName.indexOf('.'));
-			script = "if (ctx._source." + path + " == null) ctx._source." + path + " = new HashMap();";
-		}
-		script += "ctx._source." + counterFieldName + " = ctx._source." + counterFieldName + " == null ? 1 : ctx._source." + counterFieldName + " + params.count";
-		Script inline = new Script(ScriptType.INLINE, "painless", script, parameters);
-		request.script(inline);
-		request.fetchSource(true);
+        Map<String, Object> parameters = java.util.Collections.singletonMap("count", 1);
 
-		UpdateResponse updateResponse = client.update(request);
+        String script = "";
+        // check for nested field
+        if (counterFieldName.contains(".")) {
+            String path = counterFieldName.substring(0, counterFieldName.indexOf('.'));
+            script = "if (ctx._source." + path + " == null) ctx._source." + path + " = new HashMap();";
+        }
+        script += "ctx._source." + counterFieldName + " = ctx._source." + counterFieldName + " == null ? 1 : ctx._source." + counterFieldName + " + params.count";
+        Script inline = new Script(ScriptType.INLINE, "painless", script, parameters);
+        request.script(inline);
+        request.fetchSource(true);
 
-		GetResult getResult = updateResponse.getGetResult();
+        UpdateResponse updateResponse = client.update(request);
 
-		return getEntity(entity, getResult);
-	}
+        GetResult getResult = updateResponse.getGetResult();
 
-	@SuppressWarnings("unchecked")
-	private static <T extends ElasticEntity> T getEntity(T entity, GetResult getResult) throws IOException {
-		if (getResult.isExists()) {
-			String json = getResult.sourceAsString();
-			json = writeId(getResult.getId(), json);
-			return (T) readValue(json, entity.getClass());
-		} else
-			return null;
-	}
+        return getEntity(entity, getResult);
+    }
 
-	public static String getById(RestHighLevelClient client, String index, String id) throws IOException {
-		GetRequest request = new GetRequest(index, "_doc", id);
-		GetResponse response = client.get(request);
-		String json = response.getSourceAsString();
-		return writeId(id, json);
-	}
+    @SuppressWarnings("unchecked")
+    private <T extends ElasticEntity> T getEntity(T entity, GetResult getResult) throws IOException {
+        if (getResult.isExists()) {
+            String json = getResult.sourceAsString();
+            json = JsonUtil.writeId(config.getJsonObjectMapper(), getResult.getId(), json);
+            return (T) JsonUtil.getObject(json, config.getJsonObjectMapper(), entity.getClass());
+        } else
+            return null;
+    }
 
-	public static <T> T getById(RestHighLevelClient client, String index, String id, Class<T> valueType) throws IOException {
-		String json = getById(client, index, id);
-		return JsonUtil.getSnakeMapper().readValue(json, valueType);
-	}
+    public String getById(RestHighLevelClient client, String index, String id) throws IOException {
+        GetRequest request = new GetRequest(index, config.getElasticType(), id);
+        GetResponse response = client.get(request);
+        String json = response.getSourceAsString();
+        return JsonUtil.writeId(config.getJsonObjectMapper(), id, json);
+    }
 
-	public static void delete(RestHighLevelClient client, String index, String id) throws IOException {
-		DeleteRequest request = new DeleteRequest(index, "_doc", id);
-		DeleteResponse response = client.delete(request);
-		if (response.status() != RestStatus.OK)
-			throw new IOException("Delete failed: " + response.status().name());
-	}
+    public <T> T getById(RestHighLevelClient client, String index, String id, Class<T> valueType) throws IOException {
+        String json = getById(client, index, id);
+        return config.getJsonObjectMapper().readValue(json, valueType);
+    }
 
-	private static List<String> toStringList(Text[] fragments) {
-		return Arrays.stream(fragments).map(text -> text.string()).collect(Collectors.toList());
-	}
+    public void delete(RestHighLevelClient client, String index, String id) throws IOException {
+        DeleteRequest request = new DeleteRequest(index, config.getElasticType(), id);
+        DeleteResponse response = client.delete(request);
+        if (response.status() != RestStatus.OK)
+            throw new IOException("Delete failed: " + response.status().name());
+    }
 
-	public static <T> T readValue(String json, Class<T> valueType) throws IOException {
-		return JsonUtil.getSnakeMapper().readValue(json, valueType);
-	}
+    private static List<String> toStringList(Text[] fragments) {
+        return Arrays.stream(fragments).map(Text::string).collect(Collectors.toList());
+    }
 
-	public static <T> T getSingleValue(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
-		String json = querySingle(elasticQueryBuilder);
-		return json == null ? null : readValue(json, valueType);
-	}
+    public <T> T getSingleValue(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
+        String json = querySingle(elasticQueryBuilder);
+        return json == null ? null : JsonUtil.getObject(json, config.getJsonObjectMapper(), valueType);
+    }
 
-	public static <T> List<T> getValueList(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
-		String json = queryMultiple(elasticQueryBuilder).getResult();
-		TypeFactory typeFactory = JsonUtil.getSnakeMapper().getTypeFactory();
-		return JsonUtil.getSnakeMapper().readValue(json, typeFactory.constructCollectionType(List.class, valueType));
-	}
+    public <T> List<T> getValueList(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
+        String json = queryMultiple(elasticQueryBuilder).getResult();
+//        TypeFactory typeFactory = config.getJsonObjectMapper().getTypeFactory();
+//        return config.getJsonObjectMapper().readValue(json, typeFactory.constructCollectionType(List.class, valueType));
+        return JsonUtil.getList(json, config.getJsonObjectMapper(), valueType);
+    }
 
-	public static <T extends ElasticEntity> String getJson(T entity) throws IOException {
-		String json = JsonUtil.getSnakeMapper().writeValueAsString(entity);
-		return deleteId(json);
-	}
-
-	private static String writeId(String id, String source) {
-		try {
-			JsonNode jsonNode = JsonUtil.getSnakeMapper().readTree(source);
-			((ObjectNode) jsonNode).put("id", id);
-
-			return JsonUtil.getSnakeMapper().writeValueAsString(jsonNode);
-		} catch (IOException e) {
-			return source;
-		}
-	}
-
-	static String deleteId(String source) {
-		try {
-			JsonNode jsonNode = JsonUtil.getSnakeMapper().readTree(source);
-			((ObjectNode) jsonNode).remove("id");
-
-			return JsonUtil.getSnakeMapper().writeValueAsString(jsonNode);
-		} catch (IOException e) {
-			return source;
-		}
-	}
-
-	private static String removeField(String fieldName, String source) {
-		try {
-			JsonNode jsonNode = JsonUtil.getSnakeMapper().readTree(source);
-			((ObjectNode) jsonNode).remove(fieldName);
-
-			return JsonUtil.getSnakeMapper().writeValueAsString(jsonNode);
-		} catch (IOException e) {
-			return source;
-		}
-	}
-
-	/**
-	 * Set given field value to given JSON
-	 *
-	 * @param fieldName  field name to be set
-	 * @param value      new value for field
-	 * @param jsonSource original JSON
-	 * @return new JSON string
-	 */
-	private static String setNodeValue(String fieldName, String value, String jsonSource) {
-		try {
-			JsonNode jsonNode = JsonUtil.getSnakeMapper().readTree(jsonSource);
-
-			if (jsonNode.isArray()) {
-				for (JsonNode node : jsonNode) {
-					((ObjectNode) node).put(fieldName, value);
-				}
-			} else {
-				((ObjectNode) jsonNode).put(fieldName, value);
-			}
-
-			return JsonUtil.getSnakeMapper().writeValueAsString(jsonNode);
-		} catch (IOException e) {
-			return jsonSource;
-		}
-	}
-
-	private static void setSorting(ElasticQueryBuilder elasticQueryBuilder, SearchSourceBuilder searchSourceBuilder) {
-		if (elasticQueryBuilder.sortFieldName() != null) {
-			FieldSortBuilder sort = SortBuilders.fieldSort(elasticQueryBuilder.sortFieldName()).order(elasticQueryBuilder.sortOrder());
-			if (elasticQueryBuilder.nestedSortPath() != null)
-				sort.setNestedSort(new NestedSortBuilder(elasticQueryBuilder.nestedSortPath()));
-			searchSourceBuilder.sort(sort);
-		}
-	}
+    private static void setSorting(ElasticQueryBuilder elasticQueryBuilder, SearchSourceBuilder searchSourceBuilder) {
+        if (elasticQueryBuilder.sortFieldName() != null) {
+            FieldSortBuilder sort = SortBuilders.fieldSort(elasticQueryBuilder.sortFieldName()).order(elasticQueryBuilder.sortOrder());
+            if (elasticQueryBuilder.nestedSortPath() != null)
+                sort.setNestedSort(new NestedSortBuilder(elasticQueryBuilder.nestedSortPath()));
+            searchSourceBuilder.sort(sort);
+        }
+    }
 }
