@@ -1,6 +1,5 @@
 package elasticsearch.helper;
 
-import com.fasterxml.jackson.databind.type.TypeFactory;
 import org.apache.http.HttpHost;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,6 +47,11 @@ public class ElasticHelper {
     RestHighLevelClient client;
     ElasticHelperConfig config;
 
+    public ElasticHelper(RestHighLevelClient client, ElasticHelperConfig config) {
+        this.client = client;
+        this.config = config;
+    }
+
     public static RestHighLevelClient buildLocalClient() {
         return new RestHighLevelClient(RestClient.builder(new HttpHost("localhost", 9200, "http")));
     }
@@ -56,9 +60,17 @@ public class ElasticHelper {
         return new RestHighLevelClient(RestClient.builder(new HttpHost(hostname, port, "http")));
     }
 
-    public ElasticHelper(RestHighLevelClient client, ElasticHelperConfig config) {
-        this.client = client;
-        this.config = config;
+    private static List<String> toStringList(Text[] fragments) {
+        return Arrays.stream(fragments).map(Text::string).collect(Collectors.toList());
+    }
+
+    private static void setSorting(ElasticQueryBuilder elasticQueryBuilder, SearchSourceBuilder searchSourceBuilder) {
+        if (elasticQueryBuilder.sortFieldName() != null) {
+            FieldSortBuilder sort = SortBuilders.fieldSort(elasticQueryBuilder.sortFieldName()).order(elasticQueryBuilder.sortOrder());
+            if (elasticQueryBuilder.nestedSortPath() != null)
+                sort.setNestedSort(new NestedSortBuilder(elasticQueryBuilder.nestedSortPath()));
+            searchSourceBuilder.sort(sort);
+        }
     }
 
     public String querySingle(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
@@ -124,6 +136,10 @@ public class ElasticHelper {
         setSorting(elasticQueryBuilder, searchSourceBuilder);
         searchRequest.source(searchSourceBuilder);
 
+        // source filtering
+        if (elasticQueryBuilder.includeFields() != null || elasticQueryBuilder.excludeFields() != null)
+            searchSourceBuilder.fetchSource(elasticQueryBuilder.includeFields(), elasticQueryBuilder.excludeFields());
+
         // scrolling
         if (elasticQueryBuilder.scroll() != null) {
             searchRequest.scroll(elasticQueryBuilder.scroll());
@@ -132,10 +148,11 @@ public class ElasticHelper {
         long startTime = System.nanoTime();
         // get response
         SearchResponse searchResponse = elasticQueryBuilder.client().search(searchRequest);
-        logger.debug(String.format("ES search time %d ms", (System.nanoTime() - startTime) / 1000000));
+        logger.warn(String.format("ES search time %d ms", (System.nanoTime() - startTime) / 1000000));
 
         int from = elasticQueryBuilder.from();
         int size = searchResponse.getHits().totalHits > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) searchResponse.getHits().totalHits;
+        long took = searchResponse.getTook().getMillis();
 
         SearchHit[] searchHits = searchResponse.getHits().getHits();
         List<SearchHit> hits = new ArrayList<>();
@@ -185,7 +202,7 @@ public class ElasticHelper {
             json = builder.string();
         }
 
-        return new SearchResult(json, from, size);
+        return new SearchResult(json, from, size, took);
     }
 
     public <T extends ElasticEntity> void insert(RestHighLevelClient client, String index, T entity) throws IOException {
@@ -276,10 +293,6 @@ public class ElasticHelper {
             throw new IOException("Delete failed: " + response.status().name());
     }
 
-    private static List<String> toStringList(Text[] fragments) {
-        return Arrays.stream(fragments).map(Text::string).collect(Collectors.toList());
-    }
-
     public <T> T getSingleValue(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
         String json = querySingle(elasticQueryBuilder);
         return json == null ? null : JsonUtil.getObject(json, config.getJsonObjectMapper(), valueType);
@@ -287,17 +300,6 @@ public class ElasticHelper {
 
     public <T> List<T> getValueList(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
         String json = queryMultiple(elasticQueryBuilder).getResult();
-//        TypeFactory typeFactory = config.getJsonObjectMapper().getTypeFactory();
-//        return config.getJsonObjectMapper().readValue(json, typeFactory.constructCollectionType(List.class, valueType));
         return JsonUtil.getList(json, config.getJsonObjectMapper(), valueType);
-    }
-
-    private static void setSorting(ElasticQueryBuilder elasticQueryBuilder, SearchSourceBuilder searchSourceBuilder) {
-        if (elasticQueryBuilder.sortFieldName() != null) {
-            FieldSortBuilder sort = SortBuilders.fieldSort(elasticQueryBuilder.sortFieldName()).order(elasticQueryBuilder.sortOrder());
-            if (elasticQueryBuilder.nestedSortPath() != null)
-                sort.setNestedSort(new NestedSortBuilder(elasticQueryBuilder.nestedSortPath()));
-            searchSourceBuilder.sort(sort);
-        }
     }
 }
