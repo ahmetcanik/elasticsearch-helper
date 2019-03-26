@@ -34,6 +34,7 @@ import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.search.sort.NestedSortBuilder;
 import org.elasticsearch.search.sort.SortBuilders;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
@@ -42,22 +43,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class ElasticHelper {
+public class ElasticHelperClient implements Closeable {
     private static final Logger logger = LogManager.getLogger(MethodHandles.lookup().lookupClass());
-    RestHighLevelClient client;
+    RestHighLevelClient elasticClient;
     ElasticHelperConfig config;
 
-    public ElasticHelper(RestHighLevelClient client, ElasticHelperConfig config) {
-        this.client = client;
+    public ElasticHelperClient() {
+        this.elasticClient = new RestHighLevelClient(RestClient.builder(new HttpHost("localhost", 9200, "http")));
+        this.config = new ElasticHelperConfig();
+    }
+
+    public ElasticHelperClient(ElasticHelperConfig config, String hostname, int port) {
+        this.elasticClient = new RestHighLevelClient(RestClient.builder(new HttpHost(hostname, port, "http")));
         this.config = config;
-    }
-
-    public static RestHighLevelClient buildLocalClient() {
-        return new RestHighLevelClient(RestClient.builder(new HttpHost("localhost", 9200, "http")));
-    }
-
-    public static RestHighLevelClient buildRemoteClient(String hostname, int port) {
-        return new RestHighLevelClient(RestClient.builder(new HttpHost(hostname, port, "http")));
     }
 
     private static List<String> toStringList(Text[] fragments) {
@@ -90,7 +88,7 @@ public class ElasticHelper {
         setSorting(elasticQueryBuilder, searchSourceBuilder);
 
         searchRequest.source(searchSourceBuilder);
-        SearchResponse searchResponse = elasticQueryBuilder.client().search(searchRequest);
+        SearchResponse searchResponse = elasticQueryBuilder.client().getElasticClient().search(searchRequest);
         SearchHits hits = searchResponse.getHits();
 
         if (hits.totalHits == 0)
@@ -147,7 +145,7 @@ public class ElasticHelper {
 
         long startTime = System.nanoTime();
         // get response
-        SearchResponse searchResponse = elasticQueryBuilder.client().search(searchRequest);
+        SearchResponse searchResponse = elasticQueryBuilder.client().getElasticClient().search(searchRequest);
         logger.warn(String.format("ES search time %d ms", (System.nanoTime() - startTime) / 1000000));
 
         int from = elasticQueryBuilder.from();
@@ -164,7 +162,7 @@ public class ElasticHelper {
                 hits.addAll(Arrays.asList(searchHits));
                 SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId);
                 scrollRequest.scroll(elasticQueryBuilder.scroll());
-                searchResponse = elasticQueryBuilder.client().searchScroll(scrollRequest);
+                searchResponse = elasticQueryBuilder.client().getElasticClient().searchScroll(scrollRequest);
                 scrollId = searchResponse.getScrollId();
                 searchHits = searchResponse.getHits().getHits();
             }
@@ -213,7 +211,7 @@ public class ElasticHelper {
             IndexResponse response = client.index(request);
 
             // update entity id
-            entity.setId(response.getId());
+            entity.set_id(response.getId());
         } catch (IOException ioe) {
             logger.error("insert error", ioe);
             throw new IOException(ioe);
@@ -228,7 +226,7 @@ public class ElasticHelper {
             source = JsonUtil.removeField(config.getJsonObjectMapper(), ignoreField, source);
         }
 
-        UpdateRequest request = new UpdateRequest(index, config.getElasticType(), entity.getId())
+        UpdateRequest request = new UpdateRequest(index, config.getElasticType(), entity.get_id())
                 .doc(source, XContentType.JSON);
 
         request.fetchSource(true);
@@ -242,7 +240,7 @@ public class ElasticHelper {
 
     @SuppressWarnings("unchecked")
     public <T extends ElasticEntity> T incrementCounter(RestHighLevelClient client, String index, String counterFieldName, T entity) throws IOException {
-        UpdateRequest request = new UpdateRequest(index, config.getElasticType(), entity.getId());
+        UpdateRequest request = new UpdateRequest(index, config.getElasticType(), entity.get_id());
 
         Map<String, Object> parameters = java.util.Collections.singletonMap("count", 1);
 
@@ -301,5 +299,14 @@ public class ElasticHelper {
     public <T> List<T> getValueList(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
         String json = queryMultiple(elasticQueryBuilder).getResult();
         return JsonUtil.getList(json, config.getJsonObjectMapper(), valueType);
+    }
+
+    @Override
+    public void close() throws IOException {
+        this.elasticClient.close();
+    }
+
+    public RestHighLevelClient getElasticClient() {
+        return elasticClient;
     }
 }

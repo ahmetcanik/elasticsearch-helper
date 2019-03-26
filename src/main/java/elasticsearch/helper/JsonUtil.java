@@ -2,17 +2,16 @@ package elasticsearch.helper;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.PropertyNamingStrategy;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.type.TypeFactory;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.lang.invoke.MethodHandles;
 import java.util.List;
 
 public class JsonUtil {
+
+    public static final String INTERNAL_ID_COLUMN_NAME = "_id";
+
     /**
      * Builds object from given json
      *
@@ -48,7 +47,7 @@ public class JsonUtil {
     public static String writeId(ObjectMapper objectMapper, String id, String source) {
         try {
             JsonNode jsonNode = objectMapper.readTree(source);
-            ((ObjectNode) jsonNode).put("id", id);
+            ((ObjectNode) jsonNode).put(INTERNAL_ID_COLUMN_NAME, id);
 
             return objectMapper.writeValueAsString(jsonNode);
         } catch (IOException e) {
@@ -57,14 +56,7 @@ public class JsonUtil {
     }
 
     public static String deleteId(ObjectMapper objectMapper, String source) {
-        try {
-            JsonNode jsonNode = objectMapper.readTree(source);
-            ((ObjectNode) jsonNode).remove("id");
-
-            return objectMapper.writeValueAsString(jsonNode);
-        } catch (IOException e) {
-            return source;
-        }
+        return removeField(objectMapper, INTERNAL_ID_COLUMN_NAME, source);
     }
 
     public static String removeField(ObjectMapper objectMapper, String fieldName, String source) {

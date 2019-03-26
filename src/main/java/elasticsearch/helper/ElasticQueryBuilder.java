@@ -1,6 +1,5 @@
 package elasticsearch.helper;
 
-import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.sort.SortOrder;
@@ -9,7 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ElasticQueryBuilder {
-    private final RestHighLevelClient client;
+    private final ElasticHelperClient client;
     private final QueryBuilder query;
     private AggregationBuilder aggregation = null;// null means ignore
     private String sortFieldName = null;// null means ignore
@@ -24,13 +23,13 @@ public class ElasticQueryBuilder {
     private String[] includeFields; // null means ignore
     private String[] excludeFields; // null means ignore
 
-    public ElasticQueryBuilder(RestHighLevelClient client, QueryBuilder query) {
+    public ElasticQueryBuilder(ElasticHelperClient client, QueryBuilder query) {
         this.client = client;
         this.query = query;
         this.maskFields = new HashMap<>();
     }
 
-    public RestHighLevelClient client() {
+    public ElasticHelperClient client() {
         return client;
     }
 
