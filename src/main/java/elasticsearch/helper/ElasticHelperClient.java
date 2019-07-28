@@ -1,50 +1,41 @@
 package elasticsearch.helper;
 
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.experimental.FieldDefaults;
 import org.apache.http.HttpHost;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.delete.DeleteRequest;
-import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetRequest;
-import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.SearchScrollRequest;
-import org.elasticsearch.action.update.UpdateRequest;
-import org.elasticsearch.action.update.UpdateResponse;
+import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.xcontent.ToXContent;
-import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.get.GetResult;
 import org.elasticsearch.rest.RestStatus;
-import org.elasticsearch.script.Script;
-import org.elasticsearch.script.ScriptType;
 import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
-import org.elasticsearch.search.fetch.subphase.highlight.HighlightField;
-import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.search.sort.NestedSortBuilder;
 import org.elasticsearch.search.sort.SortBuilders;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@Getter
 public class ElasticHelperClient implements Closeable {
-    private static final Logger logger = LogManager.getLogger(MethodHandles.lookup().lookupClass());
     RestHighLevelClient elasticClient;
     ElasticHelperConfig config;
 
@@ -64,20 +55,21 @@ public class ElasticHelperClient implements Closeable {
 
     private static void setSorting(ElasticQueryBuilder elasticQueryBuilder, SearchSourceBuilder searchSourceBuilder) {
         if (elasticQueryBuilder.sortFieldName() != null) {
-            FieldSortBuilder sort = SortBuilders.fieldSort(elasticQueryBuilder.sortFieldName()).order(elasticQueryBuilder.sortOrder());
+            var sort =
+                    SortBuilders.fieldSort(elasticQueryBuilder.sortFieldName()).order(elasticQueryBuilder.sortOrder());
             if (elasticQueryBuilder.nestedSortPath() != null)
                 sort.setNestedSort(new NestedSortBuilder(elasticQueryBuilder.nestedSortPath()));
             searchSourceBuilder.sort(sort);
         }
     }
 
-    public String querySingle(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
+    public Optional<String> find(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
         SearchRequest searchRequest;
         if (elasticQueryBuilder.indices() == null)
             searchRequest = new SearchRequest();
         else
             searchRequest = new SearchRequest(elasticQueryBuilder.indices());
-        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        var searchSourceBuilder = new SearchSourceBuilder();
         searchSourceBuilder.query(elasticQueryBuilder.query()).size(1);
 
         // aggregation
@@ -88,39 +80,44 @@ public class ElasticHelperClient implements Closeable {
         setSorting(elasticQueryBuilder, searchSourceBuilder);
 
         searchRequest.source(searchSourceBuilder);
-        SearchResponse searchResponse = elasticQueryBuilder.client().getElasticClient().search(searchRequest);
-        SearchHits hits = searchResponse.getHits();
+        var searchResponse = elasticClient.search(searchRequest, RequestOptions.DEFAULT);
+        var hits = searchResponse.getHits();
 
+        //        if (hits.getTotalHits().value == 0)
         if (hits.totalHits == 0)
-            return null;
+            return Optional.empty();
 
-        String json = JsonUtil.writeId(config.getJsonObjectMapper(), hits.getAt(0).getId(), hits.getAt(0).getSourceAsString());
+        var json = hits.getAt(0).getSourceAsString();
 
         // do masking
-        for (String field : elasticQueryBuilder.maskFields().keySet()) {
-            json = JsonUtil.setNodeValue(config.getJsonObjectMapper(), field, elasticQueryBuilder.maskFields().get(field), json);
+        for (var field : elasticQueryBuilder.maskFields().keySet()) {
+            json = JsonUtil.setNodeValue(config.getObjectMapper(), field, elasticQueryBuilder.maskFields().get(field),
+                    json);
         }
 
-        return json;
+        return Optional.of(json);
     }
 
-    public SearchResult queryMultiple(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
+    public SearchResult findAll(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
         SearchRequest searchRequest;
         if (elasticQueryBuilder.indices() == null)
             searchRequest = new SearchRequest();
         else
             searchRequest = new SearchRequest(elasticQueryBuilder.indices());
-        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+
+        var searchSourceBuilder = new SearchSourceBuilder();
+
         searchSourceBuilder.query(elasticQueryBuilder.query());
         if (elasticQueryBuilder.from() > -1)
-            searchSourceBuilder = searchSourceBuilder.from(elasticQueryBuilder.from());
+            searchSourceBuilder.from(elasticQueryBuilder.from());
         if (elasticQueryBuilder.size() > 0)
-            searchSourceBuilder = searchSourceBuilder.size(elasticQueryBuilder.size());
+            searchSourceBuilder.size(elasticQueryBuilder.size());
 
         if (elasticQueryBuilder.highlightFields() != null) {
-            HighlightBuilder highlightBuilder = new HighlightBuilder();
+            var highlightBuilder = new HighlightBuilder();
             highlightBuilder.fields().addAll(
-                    Arrays.stream(elasticQueryBuilder.highlightFields()).map(HighlightBuilder.Field::new).collect(Collectors.toList()));
+                    Arrays.stream(elasticQueryBuilder.highlightFields()).map(HighlightBuilder.Field::new)
+                            .collect(Collectors.toList()));
             searchSourceBuilder.highlighter(highlightBuilder);
         }
 
@@ -143,26 +140,27 @@ public class ElasticHelperClient implements Closeable {
             searchRequest.scroll(elasticQueryBuilder.scroll());
         }
 
-        long startTime = System.nanoTime();
+        var startTime = System.nanoTime();
         // get response
-        SearchResponse searchResponse = elasticQueryBuilder.client().getElasticClient().search(searchRequest);
-        logger.warn(String.format("ES search time %d ms", (System.nanoTime() - startTime) / 1000000));
+        var searchResponse = elasticClient.search(searchRequest, RequestOptions.DEFAULT);
 
-        int from = elasticQueryBuilder.from();
-        int size = searchResponse.getHits().totalHits > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) searchResponse.getHits().totalHits;
-        long took = searchResponse.getTook().getMillis();
+        var from = elasticQueryBuilder.from();
+        //        var totalHits = searchResponse.getHits().getTotalHits().value;
+        var totalHits = searchResponse.getHits().totalHits;
+        var size = totalHits > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) totalHits;
+        var took = searchResponse.getTook().getMillis();
 
-        SearchHit[] searchHits = searchResponse.getHits().getHits();
+        var searchHits = searchResponse.getHits().getHits();
         List<SearchHit> hits = new ArrayList<>();
 
         // scrolling
         if (elasticQueryBuilder.scroll() != null) {
-            String scrollId = searchResponse.getScrollId();
+            var scrollId = searchResponse.getScrollId();
             while (scrollId != null && !scrollId.isEmpty() && searchHits != null && searchHits.length > 0) {
                 hits.addAll(Arrays.asList(searchHits));
-                SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId);
+                var scrollRequest = new SearchScrollRequest(scrollId);
                 scrollRequest.scroll(elasticQueryBuilder.scroll());
-                searchResponse = elasticQueryBuilder.client().getElasticClient().searchScroll(scrollRequest);
+                searchResponse = elasticClient.scroll(scrollRequest, RequestOptions.DEFAULT);
                 scrollId = searchResponse.getScrollId();
                 searchHits = searchResponse.getHits().getHits();
             }
@@ -171,18 +169,21 @@ public class ElasticHelperClient implements Closeable {
 
         List<String> jsonBuilder = new ArrayList<>();
 
-        for (SearchHit hit : hits) {
+        for (var hit : hits) {
             // write id
-            String json = JsonUtil.writeId(config.getJsonObjectMapper(), hit.getId(), hit.getSourceAsString());
+            //            var json = JsonUtil.writeId(config.getObjectMapper(), hit.getId(), hit.getSourceAsString());
+            var json = hit.getSourceAsString();
 
             // do masking
-            for (String field : elasticQueryBuilder.maskFields().keySet()) {
-                json = JsonUtil.setNodeValue(config.getJsonObjectMapper(), field, elasticQueryBuilder.maskFields().get(field), json);
+            for (var field : elasticQueryBuilder.maskFields().keySet()) {
+                json = JsonUtil.setNodeValue(config.getObjectMapper(), field,
+                        elasticQueryBuilder.maskFields().get(field), json);
             }
 
             // do highlighting
-            for (Map.Entry<String, HighlightField> entry : hit.getHighlightFields().entrySet()) {
-                json = JsonUtil.setNodeValue(config.getJsonObjectMapper(), config.getSnippetFieldName(), String.join("...", toStringList(entry.getValue().fragments())), json);
+            for (var entry : hit.getHighlightFields().entrySet()) {
+                json = JsonUtil.setNodeValue(config.getObjectMapper(), config.getSnippetFieldName(),
+                        String.join("...", toStringList(entry.getValue().fragments())), json);
             }
 
             jsonBuilder.add(json);
@@ -193,112 +194,106 @@ public class ElasticHelperClient implements Closeable {
         if (elasticQueryBuilder.aggregation() == null)
             json = "[" + String.join(",", jsonBuilder) + "]";
         else {
-            XContentBuilder builder = XContentFactory.jsonBuilder();
+            var builder = XContentFactory.jsonBuilder();
             builder.startObject();
             searchResponse.getAggregations().toXContent(builder, ToXContent.EMPTY_PARAMS);
             builder.endObject();
-            json = builder.string();
+            json = Strings.toString(builder);
         }
 
         return new SearchResult(json, from, size, took);
     }
 
-    public <T extends ElasticEntity> void insert(RestHighLevelClient client, String index, T entity) throws IOException {
+    public String save(String index, String json) throws IOException {
         try {
-            String json = JsonUtil.deleteId(config.getJsonObjectMapper(), config.getJsonObjectMapper().writeValueAsString(entity));
-            IndexRequest request = new IndexRequest(index, config.getElasticType());
+            IndexRequest request;
+            // get id if exists
+            var id = JsonUtil.getId(config.getObjectMapper(), json);
+            if (id.isPresent()) {
+                //            var request = new IndexRequest(index);
+                request = new IndexRequest(index, config.getElasticType()).id(id.get());
+            } else {
+                //            var request = new IndexRequest(index);
+                request = new IndexRequest(index, config.getElasticType());
+            }
             request.source(json, XContentType.JSON);
-            IndexResponse response = client.index(request);
-
-            // update entity id
-            entity.set_id(response.getId());
+            var response = elasticClient.index(request, RequestOptions.DEFAULT);
+            return response.getId();
         } catch (IOException ioe) {
-            logger.error("insert error", ioe);
             throw new IOException(ioe);
         }
     }
 
-    @SuppressWarnings("unchecked")
-    public <T extends ElasticEntity> T update(RestHighLevelClient client, String index, T entity, String... ignoreFields) throws IOException {
-        String source = JsonUtil.deleteId(config.getJsonObjectMapper(), config.getJsonObjectMapper().writeValueAsString(entity));
+    public String save(String index, String id, String json) throws IOException {
+        try {
+            //            var request = new IndexRequest(index).id(id);
+            var request = new IndexRequest(index, config.getElasticType()).id(id);
+            request.source(json, XContentType.JSON);
+            var response = elasticClient.index(request, RequestOptions.DEFAULT);
+            return response.getId();
+        } catch (IOException ioe) {
+            throw new IOException(ioe);
+        }
+    }
 
-        for (String ignoreField : ignoreFields) {
-            source = JsonUtil.removeField(config.getJsonObjectMapper(), ignoreField, source);
+   /* @SuppressWarnings("unchecked")
+    public <T> T update( String index, T entity,
+                        String... ignoreFields) throws IOException {
+        var source = JsonUtil.deleteId(config.getObjectMapper(),
+                config.getObjectMapper().writeValueAsString(entity));
+
+        for (var ignoreField : ignoreFields) {
+            source = JsonUtil.removeField(config.getObjectMapper(), ignoreField, source);
         }
 
-        UpdateRequest request = new UpdateRequest(index, config.getElasticType(), entity.get_id())
+        var request = new UpdateRequest(index, config.getElasticType(), entity.get_id())
                 .doc(source, XContentType.JSON);
 
         request.fetchSource(true);
 
-        UpdateResponse updateResponse = client.update(request);
+        var updateResponse = client.update(request, RequestOptions.DEFAULT);
 
-        GetResult getResult = updateResponse.getGetResult();
-
-        return getEntity(entity, getResult);
-    }
-
-    @SuppressWarnings("unchecked")
-    public <T extends ElasticEntity> T incrementCounter(RestHighLevelClient client, String index, String counterFieldName, T entity) throws IOException {
-        UpdateRequest request = new UpdateRequest(index, config.getElasticType(), entity.get_id());
-
-        Map<String, Object> parameters = java.util.Collections.singletonMap("count", 1);
-
-        String script = "";
-        // check for nested field
-        if (counterFieldName.contains(".")) {
-            String path = counterFieldName.substring(0, counterFieldName.indexOf('.'));
-            script = "if (ctx._source." + path + " == null) ctx._source." + path + " = new HashMap();";
-        }
-        script += "ctx._source." + counterFieldName + " = ctx._source." + counterFieldName + " == null ? 1 : ctx._source." + counterFieldName + " + params.count";
-        Script inline = new Script(ScriptType.INLINE, "painless", script, parameters);
-        request.script(inline);
-        request.fetchSource(true);
-
-        UpdateResponse updateResponse = client.update(request);
-
-        GetResult getResult = updateResponse.getGetResult();
+        var getResult = updateResponse.getGetResult();
 
         return getEntity(entity, getResult);
+    }*/
+
+    public Optional<String> findById(String index, Object id) throws IOException {
+        //        var request = new GetRequest(index, id);
+        var request = new GetRequest(index, config.getElasticType(), id.toString());
+        var response = elasticClient.get(request, RequestOptions.DEFAULT);
+        if (response.isExists())
+            return Optional.of(response.getSourceAsString());
+        else
+            return Optional.empty();
     }
 
-    @SuppressWarnings("unchecked")
-    private <T extends ElasticEntity> T getEntity(T entity, GetResult getResult) throws IOException {
-        if (getResult.isExists()) {
-            String json = getResult.sourceAsString();
-            json = JsonUtil.writeId(config.getJsonObjectMapper(), getResult.getId(), json);
-            return (T) JsonUtil.getObject(json, config.getJsonObjectMapper(), entity.getClass());
-        } else
-            return null;
+    public <T> Optional<T> findById(String index, Object id, Class<T> valueType) throws IOException {
+        var json = findById(index, id);
+        if (json.isPresent())
+            return Optional.of(config.getObjectMapper().readValue(json.get(), valueType));
+        else
+            return Optional.empty();
     }
 
-    public String getById(RestHighLevelClient client, String index, String id) throws IOException {
-        GetRequest request = new GetRequest(index, config.getElasticType(), id);
-        GetResponse response = client.get(request);
-        String json = response.getSourceAsString();
-        return JsonUtil.writeId(config.getJsonObjectMapper(), id, json);
-    }
-
-    public <T> T getById(RestHighLevelClient client, String index, String id, Class<T> valueType) throws IOException {
-        String json = getById(client, index, id);
-        return config.getJsonObjectMapper().readValue(json, valueType);
-    }
-
-    public void delete(RestHighLevelClient client, String index, String id) throws IOException {
-        DeleteRequest request = new DeleteRequest(index, config.getElasticType(), id);
-        DeleteResponse response = client.delete(request);
+    public void deleteById(String index, Object id) throws IOException {
+        //        var request = new DeleteRequest(index, id);
+        var request = new DeleteRequest(index, config.getElasticType(), id.toString());
+        var response = elasticClient.delete(request, RequestOptions.DEFAULT);
         if (response.status() != RestStatus.OK)
             throw new IOException("Delete failed: " + response.status().name());
     }
 
-    public <T> T getSingleValue(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
-        String json = querySingle(elasticQueryBuilder);
-        return json == null ? null : JsonUtil.getObject(json, config.getJsonObjectMapper(), valueType);
+    public <T> Optional<T> find(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
+        var json = find(elasticQueryBuilder);
+        if (json.isEmpty())
+            return Optional.empty();
+        return Optional.of(JsonUtil.getObject(json.get(), config.getObjectMapper(), valueType));
     }
 
-    public <T> List<T> getValueList(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
-        String json = queryMultiple(elasticQueryBuilder).getResult();
-        return JsonUtil.getList(json, config.getJsonObjectMapper(), valueType);
+    public <T> List<T> findAll(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
+        var json = findAll(elasticQueryBuilder).getResult();
+        return JsonUtil.getList(json, config.getObjectMapper(), valueType);
     }
 
     @Override
@@ -306,7 +301,12 @@ public class ElasticHelperClient implements Closeable {
         this.elasticClient.close();
     }
 
-    public RestHighLevelClient getElasticClient() {
-        return elasticClient;
+    @SuppressWarnings("unchecked")
+    private <T> T find(T entity, GetResult getResult) throws IOException {
+        if (getResult.isExists()) {
+            var json = getResult.sourceAsString();
+            return (T) JsonUtil.getObject(json, config.getObjectMapper(), entity.getClass());
+        } else
+            return null;
     }
 }

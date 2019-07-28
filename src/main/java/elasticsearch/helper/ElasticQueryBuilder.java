@@ -8,7 +8,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ElasticQueryBuilder {
-    private final ElasticHelperClient client;
     private final QueryBuilder query;
     private AggregationBuilder aggregation = null;// null means ignore
     private String sortFieldName = null;// null means ignore
@@ -23,14 +22,9 @@ public class ElasticQueryBuilder {
     private String[] includeFields; // null means ignore
     private String[] excludeFields; // null means ignore
 
-    public ElasticQueryBuilder(ElasticHelperClient client, QueryBuilder query) {
-        this.client = client;
+    public ElasticQueryBuilder(QueryBuilder query) {
         this.query = query;
         this.maskFields = new HashMap<>();
-    }
-
-    public ElasticHelperClient client() {
-        return client;
     }
 
     public QueryBuilder query() {
