@@ -17,25 +17,6 @@ try (ElasticHelperClient helperClient = new ElasticHelperClient()) {
 which return one document of the `twitter` index.
 
 ## Install
-```
-<repositories>
-    <repository>
-        <id>ahmetcanik-repo</id>
-        <name>ahmetcanik Maven Repo on Github</name>
-        <url>https://raw.githubusercontent.com/ahmetcanik/elasticsearch-helper/repository</url>
-    </repository>
-</repositories>
-```
-
-```
-<dependencies>
-    <dependency>
-        <groupId>com.github.ahmetcanik</groupId>
-        <artifactId>elasticsearch-helper</artifactId>
-        <version>0.1.2</version>
-    </dependency>
-</dependencies>
-```
 
 Helper capabilities:
 

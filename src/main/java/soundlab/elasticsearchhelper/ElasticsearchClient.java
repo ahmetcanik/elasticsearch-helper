@@ -1,4 +1,4 @@
-package com.github.ahmetcanik.elasticsearchhelper;
+package soundlab.elasticsearchhelper;
 
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -65,7 +65,7 @@ public class ElasticsearchClient implements Closeable {
         }
     }
 
-    public Optional<String> find(ElasticsearchQuery elasticHelperQuery) throws IOException {
+    public Optional<String> querySingle(ElasticsearchQuery elasticHelperQuery) throws IOException {
         if (elasticHelperQuery.getQuery() == null)
             throw new IllegalArgumentException("Query is not set in elasticHelperQuery");
         SearchRequest searchRequest;
@@ -102,7 +102,7 @@ public class ElasticsearchClient implements Closeable {
         return Optional.of(json);
     }
 
-    public SearchResult findAll(ElasticsearchQuery elasticHelperQuery) throws IOException {
+    public SearchResult queryAll(ElasticsearchQuery elasticHelperQuery) throws IOException {
         if (elasticHelperQuery.getQuery() == null)
             throw new IllegalArgumentException("Query is not set in elasticHelperQuery");
         SearchRequest searchRequest;
@@ -177,8 +177,6 @@ public class ElasticsearchClient implements Closeable {
         List<String> jsonBuilder = new ArrayList<>();
 
         for (var hit : hits) {
-            // write id
-            //            var json = JsonUtil.writeId(config.getObjectMapper(), hit.getId(), hit.getSourceAsString());
             var json = hit.getSourceAsString();
 
             // do masking
@@ -213,7 +211,7 @@ public class ElasticsearchClient implements Closeable {
 
     public SearchResult findAll(String index) throws IOException {
         var query = ElasticsearchQuery.builder().query(QueryBuilders.matchAllQuery()).index(index).build();
-        return findAll(query);
+        return queryAll(query);
     }
 
     public String save(String index, String json) throws IOException {
@@ -296,15 +294,15 @@ public class ElasticsearchClient implements Closeable {
             throw new IOException("Delete failed: " + response.status().name());
     }
 
-    public <T> Optional<T> find(ElasticsearchQuery elasticHelperQuery, Class<T> valueType) throws IOException {
-        var json = find(elasticHelperQuery);
+    public <T> Optional<T> querySingle(ElasticsearchQuery elasticHelperQuery, Class<T> valueType) throws IOException {
+        var json = querySingle(elasticHelperQuery);
         if (json.isEmpty())
             return Optional.empty();
         return Optional.of(JsonUtil.getObject(json.get(), config.getObjectMapper(), valueType));
     }
 
-    public <T> List<T> findAll(ElasticsearchQuery elasticHelperQuery, Class<T> valueType) throws IOException {
-        var json = findAll(elasticHelperQuery).getResult();
+    public <T> List<T> queryAll(ElasticsearchQuery elasticHelperQuery, Class<T> valueType) throws IOException {
+        var json = queryAll(elasticHelperQuery).getResult();
         return JsonUtil.getList(json, config.getObjectMapper(), valueType);
     }
 
@@ -313,7 +311,7 @@ public class ElasticsearchClient implements Closeable {
                 .query(QueryBuilders.matchAllQuery())
                 .index(index)
                 .build();
-        var json = findAll(query).getResult();
+        var json = queryAll(query).getResult();
         return JsonUtil.getList(json, config.getObjectMapper(), valueType);
     }
 
@@ -323,7 +321,7 @@ public class ElasticsearchClient implements Closeable {
     }
 
     @SuppressWarnings("unchecked")
-    private <T> T find(T entity, GetResult getResult) throws IOException {
+    private <T> T querySingle(T entity, GetResult getResult) throws IOException {
         if (getResult.isExists()) {
             var json = getResult.sourceAsString();
             return (T) JsonUtil.getObject(json, config.getObjectMapper(), entity.getClass());

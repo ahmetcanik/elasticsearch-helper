@@ -1,4 +1,4 @@
-package com.github.ahmetcanik.elasticsearchhelper;
+package soundlab.elasticsearchhelper;
 
 public class SearchResult {
     private String result;

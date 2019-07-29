@@ -1,4 +1,4 @@
-package com.github.ahmetcanik.elasticsearchhelper;
+package soundlab.elasticsearchhelper;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AccessLevel;
@@ -48,7 +48,7 @@ public class ElasticsearchClientTest {
                 .index(INDEX_NAME)
                 .build();
 
-        var result = elasticHelper.find(builder);
+        var result = elasticHelper.querySingle(builder);
 
         assert result.isPresent();
 
@@ -67,7 +67,7 @@ public class ElasticsearchClientTest {
                 .sortFieldName("id")
                 .build();
 
-        var result = elasticHelper.findAll(builder);
+        var result = elasticHelper.queryAll(builder);
 
         var expectedList = new ArrayList<TestEntity>();
         for (var i = 1; i < 101; i++) {

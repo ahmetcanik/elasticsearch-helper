@@ -1,4 +1,4 @@
-package com.github.ahmetcanik.elasticsearchhelper;
+package soundlab.elasticsearchhelper;
 
 import lombok.AccessLevel;
 import lombok.Builder;

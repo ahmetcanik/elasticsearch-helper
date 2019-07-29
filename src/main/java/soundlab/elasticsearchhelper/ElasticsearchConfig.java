@@ -1,4 +1,4 @@
-package com.github.ahmetcanik.elasticsearchhelper;
+package soundlab.elasticsearchhelper;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.databind.DeserializationFeature;

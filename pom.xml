@@ -4,14 +4,16 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.github.ahmetcanik</groupId>
+    <!--<groupId>com.github.ahmetcanik</groupId>
+    <artifactId>elasticsearch-helper</artifactId>-->
+    <groupId>soundlab</groupId>
     <artifactId>elasticsearch-helper</artifactId>
     <version>${revision}</version>
     <packaging>jar</packaging>
 
     <name>Elasticsearch Java Helper</name>
     <description>Helper classes to be used with Java High Level REST Client</description>
-    <url>https://github.com/ahmetcanik/elasticsearch-helper</url>
+    <!--    <url>https://github.com/ahmetcanik/elasticsearch-helper</url>-->
 
     <licenses>
         <license>
