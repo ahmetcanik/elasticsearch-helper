@@ -1,4 +1,4 @@
-package elasticsearch.helper;
+package com.github.ahmetcanik.elasticsearchhelper;
 
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -18,6 +18,7 @@ import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.get.GetResult;
+import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
@@ -35,16 +36,16 @@ import java.util.stream.Collectors;
 
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 @Getter
-public class ElasticHelperClient implements Closeable {
+public class ElasticsearchClient implements Closeable {
     RestHighLevelClient elasticClient;
-    ElasticHelperConfig config;
+    ElasticsearchConfig config;
 
-    public ElasticHelperClient() {
+    public ElasticsearchClient() {
         this.elasticClient = new RestHighLevelClient(RestClient.builder(new HttpHost("localhost", 9200, "http")));
-        this.config = new ElasticHelperConfig();
+        this.config = new ElasticsearchConfig();
     }
 
-    public ElasticHelperClient(ElasticHelperConfig config, String hostname, int port) {
+    public ElasticsearchClient(ElasticsearchConfig config, String hostname, int port) {
         this.elasticClient = new RestHighLevelClient(RestClient.builder(new HttpHost(hostname, port, "http")));
         this.config = config;
     }
@@ -53,31 +54,34 @@ public class ElasticHelperClient implements Closeable {
         return Arrays.stream(fragments).map(Text::string).collect(Collectors.toList());
     }
 
-    private static void setSorting(ElasticQueryBuilder elasticQueryBuilder, SearchSourceBuilder searchSourceBuilder) {
-        if (elasticQueryBuilder.sortFieldName() != null) {
+    private static void setSorting(ElasticsearchQuery elasticHelperQuery, SearchSourceBuilder searchSourceBuilder) {
+        if (elasticHelperQuery.getSortFieldName() != null) {
             var sort =
-                    SortBuilders.fieldSort(elasticQueryBuilder.sortFieldName()).order(elasticQueryBuilder.sortOrder());
-            if (elasticQueryBuilder.nestedSortPath() != null)
-                sort.setNestedSort(new NestedSortBuilder(elasticQueryBuilder.nestedSortPath()));
+                    SortBuilders.fieldSort(elasticHelperQuery.getSortFieldName())
+                            .order(elasticHelperQuery.getSortOrder());
+            if (elasticHelperQuery.getNestedSortPath() != null)
+                sort.setNestedSort(new NestedSortBuilder(elasticHelperQuery.getNestedSortPath()));
             searchSourceBuilder.sort(sort);
         }
     }
 
-    public Optional<String> find(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
+    public Optional<String> find(ElasticsearchQuery elasticHelperQuery) throws IOException {
+        if (elasticHelperQuery.getQuery() == null)
+            throw new IllegalArgumentException("Query is not set in elasticHelperQuery");
         SearchRequest searchRequest;
-        if (elasticQueryBuilder.indices() == null)
+        if (elasticHelperQuery.getIndices() == null)
             searchRequest = new SearchRequest();
         else
-            searchRequest = new SearchRequest(elasticQueryBuilder.indices());
+            searchRequest = new SearchRequest(elasticHelperQuery.getIndices().toArray(new String[0]));
         var searchSourceBuilder = new SearchSourceBuilder();
-        searchSourceBuilder.query(elasticQueryBuilder.query()).size(1);
+        searchSourceBuilder.query(elasticHelperQuery.getQuery()).size(1);
 
         // aggregation
-        if (elasticQueryBuilder.aggregation() != null)
-            searchSourceBuilder.aggregation(elasticQueryBuilder.aggregation());
+        if (elasticHelperQuery.getAggregation() != null)
+            searchSourceBuilder.aggregation(elasticHelperQuery.getAggregation());
 
         // sorting
-        setSorting(elasticQueryBuilder, searchSourceBuilder);
+        setSorting(elasticHelperQuery, searchSourceBuilder);
 
         searchRequest.source(searchSourceBuilder);
         var searchResponse = elasticClient.search(searchRequest, RequestOptions.DEFAULT);
@@ -90,61 +94,64 @@ public class ElasticHelperClient implements Closeable {
         var json = hits.getAt(0).getSourceAsString();
 
         // do masking
-        for (var field : elasticQueryBuilder.maskFields().keySet()) {
-            json = JsonUtil.setNodeValue(config.getObjectMapper(), field, elasticQueryBuilder.maskFields().get(field),
+        for (var field : elasticHelperQuery.getMaskFields().keySet()) {
+            json = JsonUtil.setNodeValue(config.getObjectMapper(), field, elasticHelperQuery.getMaskFields().get(field),
                     json);
         }
 
         return Optional.of(json);
     }
 
-    public SearchResult findAll(ElasticQueryBuilder elasticQueryBuilder) throws IOException {
+    public SearchResult findAll(ElasticsearchQuery elasticHelperQuery) throws IOException {
+        if (elasticHelperQuery.getQuery() == null)
+            throw new IllegalArgumentException("Query is not set in elasticHelperQuery");
         SearchRequest searchRequest;
-        if (elasticQueryBuilder.indices() == null)
+        if (elasticHelperQuery.getIndices() == null)
             searchRequest = new SearchRequest();
         else
-            searchRequest = new SearchRequest(elasticQueryBuilder.indices());
+            searchRequest = new SearchRequest(elasticHelperQuery.getIndices().toArray(new String[0]));
 
         var searchSourceBuilder = new SearchSourceBuilder();
 
-        searchSourceBuilder.query(elasticQueryBuilder.query());
-        if (elasticQueryBuilder.from() > -1)
-            searchSourceBuilder.from(elasticQueryBuilder.from());
-        if (elasticQueryBuilder.size() > 0)
-            searchSourceBuilder.size(elasticQueryBuilder.size());
+        searchSourceBuilder.query(elasticHelperQuery.getQuery());
+        if (elasticHelperQuery.getFrom() > -1)
+            searchSourceBuilder.from(elasticHelperQuery.getFrom());
+        if (elasticHelperQuery.getSize() > 0)
+            searchSourceBuilder.size(elasticHelperQuery.getSize());
 
-        if (elasticQueryBuilder.highlightFields() != null) {
+        if (elasticHelperQuery.getHighlightFields() != null) {
             var highlightBuilder = new HighlightBuilder();
             highlightBuilder.fields().addAll(
-                    Arrays.stream(elasticQueryBuilder.highlightFields()).map(HighlightBuilder.Field::new)
+                    elasticHelperQuery.getHighlightFields().stream().map(HighlightBuilder.Field::new)
                             .collect(Collectors.toList()));
             searchSourceBuilder.highlighter(highlightBuilder);
         }
 
         // aggregation
-        if (elasticQueryBuilder.aggregation() != null) {
-            searchSourceBuilder.aggregation(elasticQueryBuilder.aggregation());
+        if (elasticHelperQuery.getAggregation() != null) {
+            searchSourceBuilder.aggregation(elasticHelperQuery.getAggregation());
             searchSourceBuilder.size(0); // no terms, just aggregations
         }
 
         // sorting
-        setSorting(elasticQueryBuilder, searchSourceBuilder);
+        setSorting(elasticHelperQuery, searchSourceBuilder);
         searchRequest.source(searchSourceBuilder);
 
         // source filtering
-        if (elasticQueryBuilder.includeFields() != null || elasticQueryBuilder.excludeFields() != null)
-            searchSourceBuilder.fetchSource(elasticQueryBuilder.includeFields(), elasticQueryBuilder.excludeFields());
+        if (elasticHelperQuery.getIncludeFields() != null || elasticHelperQuery.getExcludeFields() != null)
+            searchSourceBuilder
+                    .fetchSource(elasticHelperQuery.getIncludeFields().toArray(new String[0]),
+                            elasticHelperQuery.getExcludeFields().toArray(new String[0]));
 
         // scrolling
-        if (elasticQueryBuilder.scroll() != null) {
-            searchRequest.scroll(elasticQueryBuilder.scroll());
+        if (elasticHelperQuery.getScroll() != null) {
+            searchRequest.scroll(elasticHelperQuery.getScroll());
         }
 
-        var startTime = System.nanoTime();
         // get response
         var searchResponse = elasticClient.search(searchRequest, RequestOptions.DEFAULT);
 
-        var from = elasticQueryBuilder.from();
+        var from = elasticHelperQuery.getFrom();
         //        var totalHits = searchResponse.getHits().getTotalHits().value;
         var totalHits = searchResponse.getHits().totalHits;
         var size = totalHits > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) totalHits;
@@ -154,12 +161,12 @@ public class ElasticHelperClient implements Closeable {
         List<SearchHit> hits = new ArrayList<>();
 
         // scrolling
-        if (elasticQueryBuilder.scroll() != null) {
+        if (elasticHelperQuery.getScroll() != null) {
             var scrollId = searchResponse.getScrollId();
             while (scrollId != null && !scrollId.isEmpty() && searchHits != null && searchHits.length > 0) {
                 hits.addAll(Arrays.asList(searchHits));
                 var scrollRequest = new SearchScrollRequest(scrollId);
-                scrollRequest.scroll(elasticQueryBuilder.scroll());
+                scrollRequest.scroll(elasticHelperQuery.getScroll());
                 searchResponse = elasticClient.scroll(scrollRequest, RequestOptions.DEFAULT);
                 scrollId = searchResponse.getScrollId();
                 searchHits = searchResponse.getHits().getHits();
@@ -175,9 +182,9 @@ public class ElasticHelperClient implements Closeable {
             var json = hit.getSourceAsString();
 
             // do masking
-            for (var field : elasticQueryBuilder.maskFields().keySet()) {
+            for (var field : elasticHelperQuery.getMaskFields().keySet()) {
                 json = JsonUtil.setNodeValue(config.getObjectMapper(), field,
-                        elasticQueryBuilder.maskFields().get(field), json);
+                        elasticHelperQuery.getMaskFields().get(field), json);
             }
 
             // do highlighting
@@ -191,7 +198,7 @@ public class ElasticHelperClient implements Closeable {
 
         String json;
 
-        if (elasticQueryBuilder.aggregation() == null)
+        if (elasticHelperQuery.getAggregation() == null)
             json = "[" + String.join(",", jsonBuilder) + "]";
         else {
             var builder = XContentFactory.jsonBuilder();
@@ -202,6 +209,11 @@ public class ElasticHelperClient implements Closeable {
         }
 
         return new SearchResult(json, from, size, took);
+    }
+
+    public SearchResult findAll(String index) throws IOException {
+        var query = ElasticsearchQuery.builder().query(QueryBuilders.matchAllQuery()).index(index).build();
+        return findAll(query);
     }
 
     public String save(String index, String json) throws IOException {
@@ -284,15 +296,24 @@ public class ElasticHelperClient implements Closeable {
             throw new IOException("Delete failed: " + response.status().name());
     }
 
-    public <T> Optional<T> find(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
-        var json = find(elasticQueryBuilder);
+    public <T> Optional<T> find(ElasticsearchQuery elasticHelperQuery, Class<T> valueType) throws IOException {
+        var json = find(elasticHelperQuery);
         if (json.isEmpty())
             return Optional.empty();
         return Optional.of(JsonUtil.getObject(json.get(), config.getObjectMapper(), valueType));
     }
 
-    public <T> List<T> findAll(ElasticQueryBuilder elasticQueryBuilder, Class<T> valueType) throws IOException {
-        var json = findAll(elasticQueryBuilder).getResult();
+    public <T> List<T> findAll(ElasticsearchQuery elasticHelperQuery, Class<T> valueType) throws IOException {
+        var json = findAll(elasticHelperQuery).getResult();
+        return JsonUtil.getList(json, config.getObjectMapper(), valueType);
+    }
+
+    public <T> List<T> findAll(String index, Class<T> valueType) throws IOException {
+        var query = ElasticsearchQuery.builder()
+                .query(QueryBuilders.matchAllQuery())
+                .index(index)
+                .build();
+        var json = findAll(query).getResult();
         return JsonUtil.getList(json, config.getObjectMapper(), valueType);
     }
 

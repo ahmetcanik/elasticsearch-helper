@@ -1,4 +1,4 @@
-package elasticsearch.helper;
+package com.github.ahmetcanik.elasticsearchhelper;
 
 import lombok.AccessLevel;
 import lombok.experimental.FieldDefaults;
@@ -17,12 +17,12 @@ public class BulkInsert implements Closeable {
     RestHighLevelClient client;
     String index;
     int size;
-    ElasticHelperConfig config;
+    ElasticsearchConfig config;
 
     @NonFinal
     BulkRequest bulkRequest;
 
-    private BulkInsert(RestHighLevelClient client, ElasticHelperConfig config, String index, int size) {
+    private BulkInsert(RestHighLevelClient client, ElasticsearchConfig config, String index, int size) {
         this.client = client;
         this.config = config;
         this.index = index;
@@ -30,7 +30,7 @@ public class BulkInsert implements Closeable {
         this.bulkRequest = new BulkRequest();
     }
 
-    public static BulkInsert create(RestHighLevelClient client, ElasticHelperConfig config, String index, int size) {
+    public static BulkInsert create(RestHighLevelClient client, ElasticsearchConfig config, String index, int size) {
         return new BulkInsert(client, config, index, size);
     }
 

@@ -1,4 +1,4 @@
-package elasticsearch.helper;
+package com.github.ahmetcanik.elasticsearchhelper;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AccessLevel;
@@ -16,7 +16,7 @@ import java.util.ArrayList;
 import static org.junit.Assert.assertEquals;
 
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public class ElasticHelperClientTest {
+public class ElasticsearchClientTest {
     private static final String INDEX_NAME = "test_entity";
     private static ObjectMapper mapper = new ObjectMapper();
     private static boolean setUpIsDone = true;
@@ -27,7 +27,7 @@ public class ElasticHelperClientTest {
             return;
         }
 
-        var elasticHelper = new ElasticHelperClient();
+        var elasticHelper = new ElasticsearchClient();
         for (var i = 1; i < 101; i++) {
             var entity = new TestEntity(i, "test" + i);
             var json = JsonUtil.getJson(mapper, entity);
@@ -41,11 +41,12 @@ public class ElasticHelperClientTest {
 
     @Test
     public void find() throws IOException {
-        var elasticHelper = new ElasticHelperClient();
+        var elasticHelper = new ElasticsearchClient();
         var id = 46;
         var query = QueryBuilders.termQuery("name", "test" + id);
-        var builder = new ElasticQueryBuilder(query)
-                .indices(INDEX_NAME);
+        var builder = ElasticsearchQuery.builder().query(query)
+                .index(INDEX_NAME)
+                .build();
 
         var result = elasticHelper.find(builder);
 
@@ -58,12 +59,13 @@ public class ElasticHelperClientTest {
 
     @Test
     public void findAll() throws IOException {
-        var elasticHelper = new ElasticHelperClient();
+        var elasticHelper = new ElasticsearchClient();
         var query = QueryBuilders.prefixQuery("name", "test");
-        var builder = new ElasticQueryBuilder(query)
-                .indices(INDEX_NAME)
+        var builder = ElasticsearchQuery.builder().query(query)
+                .index(INDEX_NAME)
                 .size(1000)
-                .sortFieldName("id");
+                .sortFieldName("id")
+                .build();
 
         var result = elasticHelper.findAll(builder);
 
@@ -80,7 +82,7 @@ public class ElasticHelperClientTest {
 
     @Test
     public void findById() throws IOException {
-        var elasticHelper = new ElasticHelperClient();
+        var elasticHelper = new ElasticsearchClient();
         var id = 46;
 
         var expected = JsonUtil.getJson(mapper, new TestEntity(id, "test" + id));
@@ -93,7 +95,7 @@ public class ElasticHelperClientTest {
 
     @Test
     public void deleteById() throws IOException {
-        var elasticHelper = new ElasticHelperClient();
+        var elasticHelper = new ElasticsearchClient();
         var id = 101;
 
         // first insert new record

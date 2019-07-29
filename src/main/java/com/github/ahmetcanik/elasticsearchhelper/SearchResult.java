@@ -1,4 +1,4 @@
-package elasticsearch.helper;
+package com.github.ahmetcanik.elasticsearchhelper;
 
 public class SearchResult {
     private String result;

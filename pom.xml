@@ -13,7 +13,6 @@
     <description>Helper classes to be used with Java High Level REST Client</description>
     <url>https://github.com/ahmetcanik/elasticsearch-helper</url>
 
-
     <licenses>
         <license>
             <name>Apache License, Version 2.0</name>

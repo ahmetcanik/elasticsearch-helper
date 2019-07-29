@@ -1,4 +1,4 @@
-package elasticsearch.helper;
+package com.github.ahmetcanik.elasticsearchhelper;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -11,7 +11,7 @@ import lombok.experimental.FieldDefaults;
 
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 @Getter
-public class ElasticHelperConfig {
+public class ElasticsearchConfig {
     @Getter
     private static ObjectMapper defaultMapper;
     @Getter
@@ -33,11 +33,11 @@ public class ElasticHelperConfig {
     String snippetFieldName;
     ObjectMapper objectMapper;
 
-    public ElasticHelperConfig() {
+    public ElasticsearchConfig() {
         this("_doc", "snippet", getDefaultMapper());
     }
 
-    public ElasticHelperConfig(String elasticType, String snippetFieldName, ObjectMapper objectMapper) {
+    public ElasticsearchConfig(String elasticType, String snippetFieldName, ObjectMapper objectMapper) {
         this.elasticType = elasticType;
         this.snippetFieldName = snippetFieldName;
         this.objectMapper = objectMapper;
