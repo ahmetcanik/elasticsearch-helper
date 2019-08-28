@@ -1,5 +1,6 @@
 package soundlab.elasticsearchhelper;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -76,5 +77,30 @@ public class JsonUtil {
 
         return objectMapper.writeValueAsString(jsonNode);
 
+    }
+
+    /**
+     * Set given field value to given JSON
+     *
+     * @param fieldName  field name to be set
+     * @param jsonSource original JSON
+     * @return new JSON string
+     */
+    public static String getNodeValue(ObjectMapper objectMapper, String fieldName, String jsonSource)
+            throws IOException {
+        var jsonNode = objectMapper.readTree(jsonSource);
+        JsonNode fieldNode = null;
+        if (jsonNode.isArray()) {
+            for (var node : jsonNode) {
+                fieldNode = node.get(fieldName);
+            }
+        } else {
+            fieldNode = jsonNode.get(fieldName);
+        }
+
+        if (fieldNode != null) {
+            return fieldNode.asText();
+        }
+        return null;
     }
 }

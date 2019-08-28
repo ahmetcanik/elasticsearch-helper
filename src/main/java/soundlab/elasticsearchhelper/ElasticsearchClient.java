@@ -179,6 +179,12 @@ public class ElasticsearchClient implements Closeable {
         for (var hit : hits) {
             var json = hit.getSourceAsString();
 
+            // id field
+            if (elasticHelperQuery.getIdField() != null) {
+                json = JsonUtil.setNodeValue(config.getObjectMapper(), elasticHelperQuery.getIdField(),
+                        hit.getId(), json);
+            }
+
             // do masking
             for (var field : elasticHelperQuery.getMaskFields().keySet()) {
                 json = JsonUtil.setNodeValue(config.getObjectMapper(), field,

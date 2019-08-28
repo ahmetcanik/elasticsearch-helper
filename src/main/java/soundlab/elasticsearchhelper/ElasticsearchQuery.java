@@ -37,4 +37,6 @@ public class ElasticsearchQuery {
     List<String> includeFields; // null means ignore
     @Singular
     List<String> excludeFields; // null means ignore
+    @Builder.Default
+    String idField = null; // null means ignore
 }
